@@ -1,0 +1,10 @@
+.git
+.venv
+data
+sample_volume
+__pycache__
+**/__pycache__
+*.pyc
+*.log
+.gitignore
+README.md

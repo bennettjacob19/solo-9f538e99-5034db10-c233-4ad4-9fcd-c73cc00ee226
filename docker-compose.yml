@@ -1,0 +1,51 @@
+# 本地演练：docker compose up --build
+# 打开 http://127.0.0.1:8000/docs
+# 试跑退机交接：docker compose exec drill python scripts/drill_handoff.py
+services:
+  drill:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gsb-backup-drill:latest
+    container_name: backup-drill
+    ports:
+      - "8000:8000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      DRILL_BASE_URL: "http://127.0.0.1:8000"
+      DRILL_DB_PATH: "/data/drill.db"
+      SAMPLE_VOLUME_DIR: "/srv/sample_volume"
+      WORKER_POLL_SECONDS: "0.25"
+    volumes:
+      - drill-data:/data          # 唯一可写位置：SQLite WAL 数据
+    read_only: true               # 整个根文件系统只读，样例卷自然不可改
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    init: true                    # tini 负责信号转发与僵尸回收
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"
+      interval: 5s
+      timeout: 4s
+      start_period: 6s
+      retries: 12
+
+  # 可选的一次性试跑容器（不会随 up 自动运行）：
+  #   docker compose run --rm drill-test
+  drill-test:
+    image: gsb-backup-drill:latest
+    profiles: ["test"]
+    depends_on:
+      drill:
+        condition: service_healthy
+    environment:
+      DRILL_BASE_URL: "http://drill:8000"
+    entrypoint: ["python", "scripts/drill_handoff.py"]
+
+volumes:
+  drill-data:
